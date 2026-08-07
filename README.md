@@ -1,7 +1,8 @@
 # GCVX_IMS
 
 A Windows desktop wrapper for the GCVX_IMS web application, built with
-Python + `pywebview`.
+Python + `pywebview`, with a GitHub Actions workflow that builds the
+`.exe` on a Windows runner and publishes it to GitHub Releases.
 
 ## Features
 
@@ -12,63 +13,108 @@ Python + `pywebview`.
   webview/browser error dialog.
 - A background watchdog keeps checking the connection while the app is
   open. If the connection drops mid-session, it automatically swaps to the
-  same custom offline screen instead of leaving a broken/blank window.
+  same custom offline screen.
 - A **Retry** button on the offline screen re-checks connectivity and the
-  service, and reloads the app automatically once both are back.
-- Right-click / context menu is disabled so the address can't be inspected
-  via "View source" or similar.
+  service, reloading the app automatically once both are back.
+- Right-click / context menu is disabled and DevTools are off, so the
+  address can't be inspected via "View source" or similar.
 
-## Project structure
+## Repository structure
 
 ```
 GCVX_IMS/
-├── main.py          # App entry point (pywebview window, connectivity checks, watchdog)
-├── error.html        # Custom offline/error screen
-├── requirements.txt   # Python dependencies
-├── build_exe.bat      # Builds a standalone GCVX_IMS.exe with PyInstaller
-└── icon.ico            # (optional) put your own .ico here for the exe icon
+├── .github/
+│   └── workflows/
+│       └── build-release.yml   # CI: builds exe, publishes to Releases
+├── main.py                      # App entry point
+├── error.html                   # Custom offline/error screen
+├── requirements.txt              # Python dependencies
+├── build_exe.bat                 # Local (manual) Windows build script
+├── icon.ico                       # (optional) add your own app icon here
+├── .gitignore
+└── README.md
 ```
 
-## Run from source (for testing)
+> `icon.ico` is optional. If you add one at the repo root, both the local
+> build script and the GitHub Actions workflow will automatically pick it
+> up and use it as the exe icon. If it's absent, the build just skips it.
 
-1. Install Python 3.9+ on Windows.
-2. Open a terminal in this folder and run:
+## Setting this up on GitHub
+
+1. Create a new repository and push these files to it (keep the folder
+   structure exactly as-is, including `.github/workflows/build-release.yml`).
+2. No extra secrets/setup needed — the workflow uses the automatically
+   provided `GITHUB_TOKEN`, which already has permission to create releases
+   in your own repo (the workflow also explicitly requests
+   `permissions: contents: write`).
+
+## How the workflow builds and releases the exe
+
+File: `.github/workflows/build-release.yml`
+
+It runs on `windows-latest`, installs dependencies from
+`requirements.txt`, and runs PyInstaller to produce `dist/GCVX_IMS.exe`
+exactly like `build_exe.bat` does locally.
+
+**It triggers in three ways:**
+
+1. **Push a version tag** — e.g.:
    ```
-   pip install -r requirements.txt
-   python main.py
+   git tag v1.0.0
+   git push origin v1.0.0
    ```
+   This builds the exe and creates/updates a GitHub Release tagged `v1.0.0`
+   with the exe attached. If your tag name contains a hyphen (e.g.
+   `v1.0.0-beta`, `v1.0.0-rc1`), it's automatically published as a
+   **pre-release**; a plain tag like `v1.0.0` is published as a normal
+   release.
 
-> Note: `pywebview` on Windows uses the Edge WebView2 runtime. It's
-> preinstalled on Windows 10/11 in almost all cases. If it's missing, install
-> the "WebView2 Runtime" from Microsoft — the user will not see any mention
-> of this, it's just a one-time environment requirement for you as the
-> developer/tester.
+2. **Manual run** — go to your repo's **Actions** tab → select
+   **"Build and Release GCVX_IMS"** → **Run workflow**. You'll be prompted
+   for:
+   - `version`: the tag to create/use (e.g. `v1.2.0` or `v1.2.0-beta`)
+   - `prerelease`: checkbox to mark it as a pre-release
+   
+   This is handy for cutting a release without needing to push a git tag
+   yourself.
 
-## Build a standalone `GCVX_IMS.exe`
+3. **Push to `main` / open a pull request** — the workflow still builds the
+   exe (as a sanity check that nothing is broken) and uploads it as a
+   **workflow artifact** (downloadable from the run's summary page), but it
+   does **not** create or touch any Release. Only tag pushes and manual runs
+   publish a release.
 
-This must be done **on a Windows machine** (PyInstaller builds a Windows
-binary only when run on Windows):
+After a successful tag-push or manual run, check your repo's **Releases**
+page — the newest run's release will be there (or updated in place if you
+reuse the same tag) with `GCVX_IMS.exe` attached as a downloadable asset.
 
-1. (Optional) Drop an `icon.ico` file into this folder if you want a custom
-   app icon.
-2. Double-click `build_exe.bat`, or run it from a terminal:
-   ```
-   build_exe.bat
-   ```
-3. The finished executable will be in `dist\GCVX_IMS.exe`. You can copy
-   just that single file to distribute the app — no console window, no
-   Python installation required on the target machine.
+## Run from source locally (for testing before pushing)
+
+```
+pip install -r requirements.txt
+python main.py
+```
+
+> `pywebview` on Windows uses the Edge WebView2 runtime, preinstalled on
+> almost all Windows 10/11 machines.
+
+## Build locally without GitHub (optional)
+
+Double-click `build_exe.bat` on a Windows machine, or run it from a
+terminal:
+```
+build_exe.bat
+```
+The finished executable will be in `dist\GCVX_IMS.exe`.
 
 ## How the "never show the URL" behavior works
 
 - The window has no address bar/toolbar (pywebview windows don't include
-  one by default), so there's nothing showing the address during normal use.
-- The window title is fixed to `GCVX_IMS`, never the page title from the
-  remote site.
+  one by default).
+- The window title is fixed to `GCVX_IMS`, never the remote page's title.
 - The offline/error screen is a fully local file and never mentions the
   remote address.
-- Right-click context menu is disabled, so "Inspect"/"View page source"
-  aren't available as an easy way to find the address.
+- Right-click context menu is disabled.
 - DevTools are disabled (`debug=False`) in the packaged build.
 
 ## Customizing
