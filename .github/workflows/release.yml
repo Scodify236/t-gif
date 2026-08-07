@@ -1,0 +1,113 @@
+name: Build and Release GCVX_IMS
+
+# Triggers:
+#   1) Push a tag like "v1.0.0" (normal release) or "v1.0.0-beta" (pre-release,
+#      auto-detected from the tag name containing a hyphen).
+#   2) Manually run this workflow from the Actions tab ("workflow_dispatch"),
+#      supplying whatever tag/version you want and choosing pre-release or not.
+#   3) Pull requests / pushes to main just build and upload the exe as a
+#      workflow artifact, WITHOUT creating a release (sanity check only).
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to create/use (e.g. v1.2.0 or v1.2.0-beta)'
+        required: true
+        default: 'v0.0.0-manual'
+      prerelease:
+        description: 'Mark this release as a pre-release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build GCVX_IMS.exe with PyInstaller
+        shell: pwsh
+        run: |
+          if (Test-Path icon.ico) {
+            pyinstaller --noconfirm --onefile --windowed --name GCVX_IMS `
+              --icon=icon.ico `
+              --add-data "error.html;." `
+              main.py
+          } else {
+            pyinstaller --noconfirm --onefile --windowed --name GCVX_IMS `
+              --add-data "error.html;." `
+              main.py
+          }
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/GCVX_IMS.exe")) {
+            Write-Error "Build failed: dist/GCVX_IMS.exe not found"
+            exit 1
+          }
+
+      - name: Always upload build as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GCVX_IMS-windows-exe
+          path: dist/GCVX_IMS.exe
+
+      # Only figure out release info / publish when this run was triggered
+      # by a version tag or a manual dispatch — not on plain branch pushes
+      # or pull requests.
+      - name: Determine release tag and pre-release flag
+        id: relinfo
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.version }}"
+            PRERELEASE="${{ github.event.inputs.prerelease }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            if [[ "$TAG" == *-* ]]; then
+              PRERELEASE="true"
+            else
+              PRERELEASE="false"
+            fi
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Create / update GitHub Release with the exe attached
+        if: steps.relinfo.outputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.relinfo.outputs.tag }}
+          name: GCVX_IMS ${{ steps.relinfo.outputs.tag }}
+          prerelease: ${{ steps.relinfo.outputs.prerelease }}
+          generate_release_notes: true
+          files: dist/GCVX_IMS.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
