@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GCVX_IMS</title>
+<style>
+  :root {
+    --bg-1: #0f172a;
+    --bg-2: #1e293b;
+    --accent: #38bdf8;
+    --accent-2: #0ea5e9;
+    --text-1: #f1f5f9;
+    --text-2: #94a3b8;
+    --card: #111827cc;
+    --danger: #f87171;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: "Segoe UI", "Inter", Arial, sans-serif;
+    background: radial-gradient(circle at 30% 20%, var(--bg-2), var(--bg-1) 70%);
+    color: var(--text-1);
+    -webkit-user-select: none;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  .wrap {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card {
+    width: 420px;
+    max-width: 90vw;
+    background: var(--card);
+    border: 1px solid #334155;
+    border-radius: 16px;
+    padding: 40px 36px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    backdrop-filter: blur(6px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 26px;
+  }
+
+  .logo-badge {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 18px;
+    color: #06202e;
+  }
+
+  .logo-text {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .icon {
+    margin: 6px auto 20px auto;
+    width: 64px;
+    height: 64px;
+    opacity: 0.9;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 10px 0;
+  }
+
+  p.msg {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-2);
+    margin: 0 0 26px 0;
+  }
+
+  #status {
+    min-height: 18px;
+    font-size: 13px;
+    color: var(--danger);
+    margin-bottom: 14px;
+  }
+
+  button#retryBtn {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #06202e;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+
+  button#retryBtn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  button#retryBtn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .footer {
+    margin-top: 22px;
+    font-size: 11px;
+    color: #475569;
+    letter-spacing: 0.3px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="logo">
+        <div class="logo-badge">G</div>
+        <div class="logo-text">GCVX_IMS</div>
+      </div>
+
+      <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 9L12 4L23 9" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M5 13C7.5 11 16.5 11 19 13" stroke="#64748b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8.5 17C10 16 14 16 15.5 17" stroke="#94a3b8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="12" cy="20.2" r="1.3" fill="#38bdf8"/>
+        <line x1="2" y1="2" x2="22" y2="22" stroke="#f87171" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+
+      <h1>You're not connected</h1>
+      <p class="msg">
+        GCVX_IMS can't reach its services right now. Please check your
+        internet connection and try again. If the connection is fine, the
+        service may be temporarily unavailable &mdash; please try again in a
+        moment.
+      </p>
+
+      <div id="status"></div>
+
+      <button id="retryBtn" onclick="retryConnection()">Retry</button>
+
+      <div class="footer">GCVX_IMS</div>
+    </div>
+  </div>
+
+  <script>
+    let apiReady = false;
+    window.addEventListener('pywebviewready', function () {
+      apiReady = true;
+    });
+
+    async function retryConnection() {
+      const btn = document.getElementById('retryBtn');
+      const status = document.getElementById('status');
+
+      btn.disabled = true;
+      btn.innerText = 'Checking...';
+      status.innerText = '';
+
+      // Give the bridge a brief moment to attach if the page just loaded.
+      if (!apiReady && !(window.pywebview && window.pywebview.api)) {
+        await new Promise(r => setTimeout(r, 400));
+      }
+
+      try {
+        if (!(window.pywebview && window.pywebview.api)) {
+          throw new Error('bridge_unavailable');
+        }
+        const result = await window.pywebview.api.retry();
+        if (!result || !result.ok) {
+          btn.disabled = false;
+          btn.innerText = 'Retry';
+          const reason = result && result.reason;
+          if (reason === 'no_internet') {
+            status.innerText = 'No internet connection detected.';
+          } else {
+            status.innerText = 'Still unable to connect. Please try again shortly.';
+          }
+        }
+        // On success the window navigates away from this page automatically.
+      } catch (e) {
+        btn.disabled = false;
+        btn.innerText = 'Retry';
+        status.innerText = 'Still unable to connect. Please try again shortly.';
+      }
+    }
+  </script>
+</body>
+</html>
