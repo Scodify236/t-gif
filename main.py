@@ -99,35 +99,35 @@ class Api:
         self._window_ref = window_ref
         self._state = state
 
+    def _navigate_async(self, url: str):
+        def _target():
+            time.sleep(0.05)
+            window = self._window_ref["window"]
+            if window:
+                try:
+                    window.load_url(url)
+                except Exception:
+                    pass
+        threading.Thread(target=_target, daemon=True).start()
+
     def retry(self):
         """Used by the offline screen's own Retry button."""
-        window = self._window_ref["window"]
         if not has_internet():
             return {"ok": False, "reason": "no_internet"}
         if not server_reachable():
             return {"ok": False, "reason": "unavailable"}
-        try:
-            window.load_url(TARGET_URL)
-        except Exception:
-            return {"ok": False, "reason": "unavailable"}
+        self._navigate_async(TARGET_URL)
         self._state["showing_app"] = True
         return {"ok": True}
 
     def refresh_app(self):
         """Toolbar 'Refresh': reload the current webpage. If the app can be
         reached, reload it; otherwise fall back to the offline screen."""
-        window = self._window_ref["window"]
         if has_internet() and server_reachable():
-            try:
-                window.load_url(TARGET_URL)
-            except Exception:
-                return {"ok": False}
+            self._navigate_async(TARGET_URL)
             self._state["showing_app"] = True
             return {"ok": True}
-        try:
-            window.load_url(ERROR_PAGE)
-        except Exception:
-            pass
+        self._navigate_async(ERROR_PAGE)
         self._state["showing_app"] = False
         return {"ok": False}
 
@@ -149,43 +149,27 @@ class Api:
             cache_bust = str(int(time.time() * 1000))
             sep = "&" if "?" in TARGET_URL else "?"
             fresh_url = f"{TARGET_URL}{sep}_gcvx_cb={cache_bust}"
-            try:
-                window.load_url(fresh_url)
-            except Exception:
-                return {"ok": False}
+            self._navigate_async(fresh_url)
             self._state["showing_app"] = True
             return {"ok": True}
 
-        try:
-            window.load_url(ERROR_PAGE)
-        except Exception:
-            pass
+        self._navigate_async(ERROR_PAGE)
         self._state["showing_app"] = False
         return {"ok": False}
 
 
 # ---------------------------------------------------------------------------
-# Background watchdog: if the app drops mid-session, swap to the error page
-# instead of letting the webview show its own error/blank screen.
+# Window Construction
 # ---------------------------------------------------------------------------
-def watchdog(window_ref: dict, state: dict, stop_event: threading.Event):
-    time.sleep(STARTUP_GRACE_PERIOD)
-    while not stop_event.is_set():
-        window = window_ref.get("window")
-        if window is not None:
-            ok = app_available()
-            if not ok and state.get("showing_app", False):
-                state["showing_app"] = False
-                try:
-                    window.load_url(ERROR_PAGE)
-                except Exception:
-                    pass
-            elif ok and not state.get("showing_app", False) and state.get("auto_recover", False):
-                # Only auto-recover automatically if the user hasn't been
-                # dropped into a manual retry flow; the Retry button on the
-                # error page handles the normal recovery path.
-                pass
-        stop_event.wait(WATCHDOG_INTERVAL)
+def app_icon_path() -> str:
+    for filename in ("icon.ico", "icon.icns", "images.png"):
+        p = resource_path(filename)
+        if os.path.exists(p):
+            return p
+    return ""
+
+
+APP_ICON = app_icon_path()
 
 
 def build_window(window_ref: dict, state: dict) -> "webview.Window":
@@ -229,21 +213,9 @@ def build_window(window_ref: dict, state: dict) -> "webview.Window":
 def main():
     window_ref = {"window": None}
     state = {"showing_app": False, "auto_recover": False}
-    stop_event = threading.Event()
 
     build_window(window_ref, state)
-
-    watchdog_thread = threading.Thread(
-        target=watchdog, args=(window_ref, state, stop_event), daemon=True
-    )
-    watchdog_thread.start()
-
-    def on_closed():
-        stop_event.set()
-
-    window_ref["window"].events.closed += on_closed
-
-    webview.start(debug=False, http_server=False)
+    webview.start(debug=False, http_server=False, icon=APP_ICON if APP_ICON else None)
 
 
 if __name__ == "__main__":

@@ -15,10 +15,14 @@ if exist icon.ico (
     pyinstaller --noconfirm --onefile --windowed --name %APP_NAME% ^
         --icon=icon.ico ^
         --add-data "error.html;." ^
+        --add-data "images.png;." ^
+        --add-data "icon.ico;." ^
+        --add-data "icon.icns;." ^
         main.py
 ) else (
     pyinstaller --noconfirm --onefile --windowed --name %APP_NAME% ^
         --add-data "error.html;." ^
+        --add-data "images.png;." ^
         main.py
 )
 
