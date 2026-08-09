@@ -14,8 +14,18 @@ Python + `pywebview`, with a GitHub Actions workflow that builds the
 - A background watchdog keeps checking the connection while the app is
   open. If the connection drops mid-session, it automatically swaps to the
   same custom offline screen.
-- A **Retry** button on the offline screen re-checks connectivity and the
-  service, reloading the app automatically once both are back.
+- A fixed **toolbar at the top** is injected into every page the window
+  shows (the real app and the offline screen), with three buttons:
+  - **Refresh** — reloads the current webpage.
+  - **Update** — clears all local cache, cookies, and browser storage
+    (Cache API, `localStorage`, `sessionStorage`, IndexedDB) for the app,
+    then does a fresh, cache-busted reload of the website.
+  - **About** — opens an in-app popup (not a browser window, never
+    navigates anywhere) showing "GCVX_IMS — Developed and designed by
+    Kouzu — kouzu.in" as plain text. It's not a clickable link, so the
+    site is never opened from inside the app.
+- A **Retry** button also remains on the offline screen itself, re-checking
+  connectivity and reloading the app once it's back.
 - Right-click / context menu is disabled and DevTools are off, so the
   address can't be inspected via "View source" or similar.
 
@@ -27,6 +37,7 @@ GCVX_IMS/
 │   └── workflows/
 │       └── build-release.yml   # CI: builds exe, publishes to Releases
 ├── main.py                      # App entry point
+├── toolbar.py                    # Injected toolbar (Refresh/Update/About) + hardening JS
 ├── error.html                   # Custom offline/error screen
 ├── requirements.txt              # Python dependencies
 ├── build_exe.bat                 # Local (manual) Windows build script
@@ -119,7 +130,13 @@ The finished executable will be in `dist\GCVX_IMS.exe`.
 
 ## Customizing
 
-- Change branding text/colors in `error.html`.
+- Change branding text/colors in `error.html` (offline screen) or
+  `toolbar.py` (toolbar + About popup).
 - Adjust window size in `main.py` (`WINDOW_WIDTH`, `WINDOW_HEIGHT`).
 - Adjust how often the app checks connectivity via `WATCHDOG_INTERVAL` in
   `main.py`.
+- `Api.update_app()` calls `window.clear_cookies()`, which is only
+  available on newer `pywebview` versions (4.2+). It's wrapped in a
+  `try/except`, so on older versions cookie-clearing is silently skipped
+  while the storage-clearing (cache/localStorage/sessionStorage/IndexedDB)
+  and cache-busted reload still run normally.

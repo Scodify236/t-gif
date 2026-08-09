@@ -17,6 +17,8 @@ import urllib.request
 
 import webview
 
+from toolbar import HARDENING_JS, CLEAR_STORAGE_JS, TOOLBAR_JS
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -91,13 +93,14 @@ def app_available() -> bool:
 # JS <-> Python bridge
 # ---------------------------------------------------------------------------
 class Api:
-    """Exposed to the error page's JavaScript as `window.pywebview.api`."""
+    """Exposed to injected page JavaScript as `window.pywebview.api`."""
 
     def __init__(self, window_ref: dict, state: dict):
         self._window_ref = window_ref
         self._state = state
 
     def retry(self):
+        """Used by the offline screen's own Retry button."""
         window = self._window_ref["window"]
         if not has_internet():
             return {"ok": False, "reason": "no_internet"}
@@ -109,6 +112,56 @@ class Api:
             return {"ok": False, "reason": "unavailable"}
         self._state["showing_app"] = True
         return {"ok": True}
+
+    def refresh_app(self):
+        """Toolbar 'Refresh': reload the current webpage. If the app can be
+        reached, reload it; otherwise fall back to the offline screen."""
+        window = self._window_ref["window"]
+        if has_internet() and server_reachable():
+            try:
+                window.load_url(TARGET_URL)
+            except Exception:
+                return {"ok": False}
+            self._state["showing_app"] = True
+            return {"ok": True}
+        try:
+            window.load_url(ERROR_PAGE)
+        except Exception:
+            pass
+        self._state["showing_app"] = False
+        return {"ok": False}
+
+    def update_app(self):
+        """Toolbar 'Update': clear all local cache/cookies/storage for the
+        app, then do a fresh, cache-busted reload of the website."""
+        window = self._window_ref["window"]
+
+        try:
+            window.clear_cookies()
+        except Exception:
+            pass
+        try:
+            window.evaluate_js(CLEAR_STORAGE_JS)
+        except Exception:
+            pass
+
+        if has_internet() and server_reachable():
+            cache_bust = str(int(time.time() * 1000))
+            sep = "&" if "?" in TARGET_URL else "?"
+            fresh_url = f"{TARGET_URL}{sep}_gcvx_cb={cache_bust}"
+            try:
+                window.load_url(fresh_url)
+            except Exception:
+                return {"ok": False}
+            self._state["showing_app"] = True
+            return {"ok": True}
+
+        try:
+            window.load_url(ERROR_PAGE)
+        except Exception:
+            pass
+        self._state["showing_app"] = False
+        return {"ok": False}
 
 
 # ---------------------------------------------------------------------------
@@ -158,10 +211,14 @@ def build_window(window_ref: dict, state: dict) -> "webview.Window":
         # Best-effort hardening: no context menu / view-source, so the
         # underlying address is never exposed via the right-click menu.
         try:
-            window.evaluate_js(
-                "document.addEventListener('contextmenu', "
-                "function(e){ e.preventDefault(); });"
-            )
+            window.evaluate_js(HARDENING_JS)
+        except Exception:
+            pass
+        # Inject the GCVX_IMS toolbar (Refresh / Update / About) on top of
+        # whatever page just finished loading — the real app or the local
+        # offline screen.
+        try:
+            window.evaluate_js(TOOLBAR_JS)
         except Exception:
             pass
 
