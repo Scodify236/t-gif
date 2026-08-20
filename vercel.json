@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "https://allnewuser-lyrics.hf.space/$1"
+      "destination": "https://shashwatidr-filestore.hf.space/$1"
     }
   ]
 }
