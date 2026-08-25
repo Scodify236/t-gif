@@ -19,7 +19,7 @@ import webview
 
 webview.settings['ALLOW_DOWNLOADS'] = True
 
-from toolbar import HARDENING_JS, CLEAR_STORAGE_JS, TOOLBAR_JS
+from toolbar import HARDENING_JS, CLEAR_STORAGE_JS, TOOLBAR_JS, DOWNLOAD_INTERCEPTOR_JS
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -159,6 +159,40 @@ class Api:
         self._state["showing_app"] = False
         return {"ok": False}
 
+    def save_download(self, base64_data: str, filename: str):
+        """Saves a file downloaded via JS as base64 to a user-selected path."""
+        import base64
+        window = self._window_ref["window"]
+        if not window:
+            return {"ok": False, "reason": "no_window"}
+
+        file_types = ('All files (*.*)',)
+        if '.' in filename:
+            ext = filename.split('.')[-1]
+            file_types = (f'{ext.upper()} files (*.{ext})', 'All files (*.*)')
+
+        try:
+            save_path = window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                directory=os.path.expanduser("~/Downloads"),
+                save_filename=filename,
+                file_types=file_types
+            )
+            
+            if save_path:
+                if isinstance(save_path, (list, tuple)):
+                    if not save_path:
+                        return {"ok": False, "reason": "cancelled"}
+                    save_path = save_path[0]
+                
+                data = base64.b64decode(base64_data)
+                with open(save_path, "wb") as f:
+                    f.write(data)
+                return {"ok": True, "path": save_path}
+            return {"ok": False, "reason": "cancelled"}
+        except Exception as e:
+            return {"ok": False, "reason": str(e)}
+
 
 # ---------------------------------------------------------------------------
 # Window Construction
@@ -205,6 +239,10 @@ def build_window(window_ref: dict, state: dict) -> "webview.Window":
         # offline screen.
         try:
             window.evaluate_js(TOOLBAR_JS)
+        except Exception:
+            pass
+        try:
+            window.evaluate_js(DOWNLOAD_INTERCEPTOR_JS)
         except Exception:
             pass
 
