@@ -17,6 +17,8 @@ import urllib.request
 
 import webview
 
+webview.settings['ALLOW_DOWNLOADS'] = True
+
 from toolbar import HARDENING_JS, CLEAR_STORAGE_JS, TOOLBAR_JS
 
 # ---------------------------------------------------------------------------
