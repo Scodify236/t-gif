@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "https://shashwatidr-filestore.hf.space/$1"
+      "destination": "http://shashwatidr-casquad.hf.space/$1"
     }
   ]
 }
